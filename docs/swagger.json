@@ -1,0 +1,108 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/execute": {
+            "post": {
+                "description": "Accepts a list of instructions and returns calculation results",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "calculator"
+                ],
+                "summary": "Execute calculator instructions",
+                "parameters": [
+                    {
+                        "description": "Instructions",
+                        "name": "instructions",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/model.Instruction"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/model.PrintResults"
+                        }
+                    },
+                    "400": {
+                        "description": "invalid json",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "model.Instruction": {
+            "type": "object",
+            "properties": {
+                "left": {},
+                "op": {
+                    "type": "string"
+                },
+                "right": {},
+                "type": {
+                    "$ref": "#/definitions/model.InstructionType"
+                },
+                "var": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.InstructionType": {
+            "type": "string",
+            "enum": [
+                "calc",
+                "print"
+            ],
+            "x-enum-varnames": [
+                "TypeCalc",
+                "TypePrint"
+            ]
+        },
+        "model.PrintResult": {
+            "type": "object",
+            "properties": {
+                "value": {
+                    "type": "integer"
+                },
+                "var": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.PrintResults": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.PrintResult"
+                    }
+                }
+            }
+        }
+    }
+}

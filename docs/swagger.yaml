@@ -1,0 +1,70 @@
+definitions:
+  model.Instruction:
+    properties:
+      left: {}
+      op:
+        type: string
+      right: {}
+      type:
+        $ref: '#/definitions/model.InstructionType'
+      var:
+        type: string
+    type: object
+  model.InstructionType:
+    enum:
+    - calc
+    - print
+    type: string
+    x-enum-varnames:
+    - TypeCalc
+    - TypePrint
+  model.PrintResult:
+    properties:
+      value:
+        type: integer
+      var:
+        type: string
+    type: object
+  model.PrintResults:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/model.PrintResult'
+        type: array
+    type: object
+info:
+  contact: {}
+paths:
+  /execute:
+    post:
+      consumes:
+      - application/json
+      description: Accepts a list of instructions and returns calculation results
+      parameters:
+      - description: Instructions
+        in: body
+        name: instructions
+        required: true
+        schema:
+          items:
+            $ref: '#/definitions/model.Instruction'
+          type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/model.PrintResults'
+        "400":
+          description: invalid json
+          schema:
+            type: string
+        "500":
+          description: internal error
+          schema:
+            type: string
+      summary: Execute calculator instructions
+      tags:
+      - calculator
+swagger: "2.0"
