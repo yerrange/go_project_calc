@@ -7,20 +7,20 @@ const (
 	TypePrint InstructionType = "print"
 )
 
-type IncomingInstruction struct {
-	Type  string      `json:"type"`
-	Var   string      `json:"var"`
-	Op    string      `json:"op,omitempty"`
-	Left  interface{} `json:"left,omitempty"`
-	Right interface{} `json:"right,omitempty"`
-}
+// type IncomingInstruction struct {
+// 	Type  string      `json:"type"`
+// 	Var   string      `json:"var"`
+// 	Op    string      `json:"op,omitempty"`
+// 	Left  interface{} `json:"left,omitempty"`
+// 	Right interface{} `json:"right,omitempty"`
+// }
 
 type Instruction struct {
 	Type  InstructionType `json:"type"`
 	Var   string          `json:"var"`
 	Op    string          `json:"op,omitempty"`
-	Left  any             `json:"left,omitempty"`
-	Right any             `json:"right,omitempty"`
+	Left  interface{}     `json:"left,omitempty"`
+	Right interface{}     `json:"right,omitempty"`
 }
 
 type PrintResult struct {

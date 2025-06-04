@@ -9,6 +9,7 @@ import (
 	pb "github.com/yerrange/go_project_calc/proto"
 )
 
+// интерфейс для сервера
 type GrpcServer struct {
 	pb.UnimplementedCalculatorServer
 }
@@ -16,6 +17,7 @@ type GrpcServer struct {
 func (s *GrpcServer) Execute(ctx context.Context, req *pb.ExecuteRequest) (*pb.ExecuteResponse, error) {
 	instructions := []model.Instruction{}
 
+	// необходимо преобразовать запрос из protobuf в типы Go
 	for _, instr := range req.Instructions {
 		mi, err := convertToModelInstruction(instr)
 		if err != nil {
@@ -24,11 +26,13 @@ func (s *GrpcServer) Execute(ctx context.Context, req *pb.ExecuteRequest) (*pb.E
 		instructions = append(instructions, mi)
 	}
 
+	// основная логика
 	result, err := core.ExecuteInstructions(instructions)
 	if err != nil {
 		return nil, err
 	}
 
+	// формирование ответа, обратное преобразование в protobuf
 	resp := &pb.ExecuteResponse{}
 	for _, r := range result {
 		resp.Items = append(resp.Items, &pb.PrintResult{
@@ -40,6 +44,7 @@ func (s *GrpcServer) Execute(ctx context.Context, req *pb.ExecuteRequest) (*pb.E
 	return resp, nil
 }
 
+// пытаемся привести к более конкретному типу
 func parseEntity(val interface{}) interface{} {
 	switch v := val.(type) {
 	case string:
@@ -55,6 +60,7 @@ func parseEntity(val interface{}) interface{} {
 	}
 }
 
+// функция преобразования из protobuf в типы Go
 func convertToModelInstruction(instr *pb.Instruction) (model.Instruction, error) {
 	var instrType model.InstructionType
 	switch instr.Type {

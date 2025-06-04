@@ -1,7 +1,6 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -11,50 +10,51 @@ import (
 
 type VariableStore struct {
 	mu    sync.RWMutex
-	store map[string]int64
+	data  map[string]int64
 	ready map[string]*sync.Cond
 }
 
 func NewVariableStore() *VariableStore {
 	return &VariableStore{
-		store: make(map[string]int64),
+		data:  make(map[string]int64),
 		ready: make(map[string]*sync.Cond),
 	}
 }
 
-func (vs *VariableStore) Set(varName string, value int64) error {
+func (vs *VariableStore) Set(name string, value int64) error {
 	vs.mu.Lock()
 	defer vs.mu.Unlock()
 
-	if _, exists := vs.store[varName]; exists {
-		return fmt.Errorf("variable %s already set", varName)
+	if _, exists := vs.data[name]; exists {
+		return fmt.Errorf("variable %s already set", name)
 	}
-	vs.store[varName] = value
+	vs.data[name] = value
 
-	if cond, ok := vs.ready[varName]; ok {
+	if cond, ok := vs.ready[name]; ok {
 		cond.Broadcast()
 	}
-
 	return nil
 }
 
-func (vs *VariableStore) Get(varName string) (int64, error) {
+func (vs *VariableStore) Get(name string) (int64, error) {
 	vs.mu.RLock()
-	val, ok := vs.store[varName]
+	val, ok := vs.data[name]
 	vs.mu.RUnlock()
 	if ok {
 		return val, nil
 	}
 
 	vs.mu.Lock()
-	cond, ok := vs.ready[varName]
+	defer vs.mu.Unlock()
+
+	cond, ok := vs.ready[name]
 	if !ok {
 		cond = sync.NewCond(&vs.mu)
-		vs.ready[varName] = cond
+		vs.ready[name] = cond
 	}
+
 	for {
-		if val, ok := vs.store[varName]; ok {
-			vs.mu.Unlock()
+		if val, ok := vs.data[name]; ok {
 			return val, nil
 		}
 		cond.Wait()
@@ -64,144 +64,129 @@ func (vs *VariableStore) Get(varName string) (int64, error) {
 func ExecuteInstructions(instructions []model.Instruction) ([]model.PrintResult, error) {
 	store := NewVariableStore()
 	var wg sync.WaitGroup
-	printResults := []model.PrintResult{}
-	printMu := sync.Mutex{}
+	var resultsMu sync.Mutex
+	var results []model.PrintResult
 
-	declaredVars := map[string]struct{}{}
-	for _, instr := range instructions {
-		if instr.Type == model.TypeCalc {
-			if _, exists := declaredVars[instr.Var]; exists {
-				return nil, fmt.Errorf("variable '%s' is defined more than once", instr.Var)
-			}
-			declaredVars[instr.Var] = struct{}{}
-		}
-	}
+	declared := make(map[string]struct{})
 
 	for _, instr := range instructions {
-		if instr.Type != model.TypeCalc && instr.Type != model.TypePrint {
-			return nil, fmt.Errorf("unsupported instruction type: '%s'", instr.Type)
-		}
-
-		if instr.Type == model.TypeCalc {
-			if instr.Op != "+" && instr.Op != "-" && instr.Op != "*" {
-				return nil, fmt.Errorf("unsupported operation '%s' for variable '%s'", instr.Op, instr.Var)
-			}
-			if err := validateOperand(instr.Left, declaredVars); err != nil {
-				return nil, fmt.Errorf("invalid left operand for '%s': %v", instr.Var, err)
-			}
-			if err := validateOperand(instr.Right, declaredVars); err != nil {
-				return nil, fmt.Errorf("invalid right operand for '%s': %v", instr.Var, err)
-			}
-		}
-
-		if instr.Type == model.TypePrint {
-			if _, ok := declaredVars[instr.Var]; !ok {
-				return nil, fmt.Errorf("cannot print undeclared variable '%s'", instr.Var)
-			}
-		}
-
 		switch instr.Type {
 		case model.TypeCalc:
+			if _, exists := declared[instr.Var]; exists {
+				return nil, fmt.Errorf("variable '%s' declared multiple times", instr.Var)
+			}
+			declared[instr.Var] = struct{}{}
+
+			if err := validateOperands(instr.Left, instr.Right, declared); err != nil {
+				return nil, fmt.Errorf("invalid operands for '%s': %v", instr.Var, err)
+			}
+
+			if _, ok := supportedOps[instr.Op]; !ok {
+				return nil, fmt.Errorf("unsupported operation: %s", instr.Op)
+			}
+
 			wg.Add(1)
 			go func(inst model.Instruction) {
 				defer wg.Done()
 				time.Sleep(50 * time.Millisecond)
 
-				leftVal, err := resolveOperand(inst.Left, store)
+				left, err := evalOperand(inst.Left, store)
 				if err != nil {
-					fmt.Println("error left:", err)
 					return
 				}
-				rightVal, err := resolveOperand(inst.Right, store)
+				right, err := evalOperand(inst.Right, store)
 				if err != nil {
-					fmt.Println("error right:", err)
 					return
 				}
 
-				var res int64
-				switch inst.Op {
-				case "+":
-					res = leftVal + rightVal
-				case "-":
-					res = leftVal - rightVal
-				case "*":
-					res = leftVal * rightVal
-				}
-
-				if err := store.Set(inst.Var, res); err != nil {
-					fmt.Println("set error:", err)
-					return
+				res, err := applyOperation(inst.Op, left, right)
+				if err == nil {
+					_ = store.Set(inst.Var, res)
 				}
 			}(instr)
 
 		case model.TypePrint:
+			if _, ok := declared[instr.Var]; !ok {
+				return nil, fmt.Errorf("cannot print undeclared variable: %s", instr.Var)
+			}
+
 			wg.Add(1)
 			go func(inst model.Instruction) {
 				defer wg.Done()
 				val, err := store.Get(inst.Var)
 				if err != nil {
-					fmt.Println("print error:", err)
 					return
 				}
-				printMu.Lock()
-				printResults = append(printResults, model.PrintResult{
-					Var:   inst.Var,
-					Value: val,
-				})
-				printMu.Unlock()
+				resultsMu.Lock()
+				results = append(results, model.PrintResult{Var: inst.Var, Value: val})
+				resultsMu.Unlock()
 			}(instr)
 
 		default:
-			return nil, errors.New("unknown instruction type")
+			return nil, fmt.Errorf("unknown instruction type: %s", instr.Type)
 		}
 	}
 
 	wg.Wait()
-	return printResults, nil
+	return results, nil
 }
 
-func resolveOperand(op interface{}, vars *VariableStore) (int64, error) {
+var supportedOps = map[string]struct{}{
+	"+": {},
+	"-": {},
+	"*": {},
+}
+
+func applyOperation(op string, a, b int64) (int64, error) {
+	switch op {
+	case "+":
+		return a + b, nil
+	case "-":
+		return a - b, nil
+	case "*":
+		return a * b, nil
+	default:
+		return 0, fmt.Errorf("invalid operator: %s", op)
+	}
+}
+
+func evalOperand(op interface{}, store *VariableStore) (int64, error) {
 	switch v := op.(type) {
 	case int64:
 		return v, nil
 	case float64:
 		return int64(v), nil
 	case string:
-		val, err := vars.Get(v)
-		if err == nil {
-			return val, nil
+		if n, err := tryParseInt(v); err == nil {
+			return n, nil
 		}
-		var parsed int64
-		if _, err := fmt.Sscan(v, &parsed); err == nil {
-			return parsed, nil
-		}
-		return 0, fmt.Errorf("invalid operand: %v", v)
+		return store.Get(v)
 	default:
 		return 0, fmt.Errorf("unsupported operand type: %T", v)
 	}
 }
 
-func validateOperand(op interface{}, declaredVars map[string]struct{}) error {
-	switch v := op.(type) {
-	case int64, float64:
-		return nil
-	case string:
-		var tmp int64
-		if _, err := fmt.Sscan(v, &tmp); err == nil {
-			return nil // строка — число
+func validateOperands(left, right interface{}, declared map[string]struct{}) error {
+	for _, op := range []interface{}{left, right} {
+		switch v := op.(type) {
+		case int64, float64:
+			continue
+		case string:
+			if _, ok := declared[v]; ok {
+				continue
+			}
+			if _, err := tryParseInt(v); err != nil {
+				return fmt.Errorf("undeclared variable or invalid literal '%s'", v)
+			}
+		default:
+			return fmt.Errorf("unsupported operand type: %T", v)
 		}
-		if _, ok := declaredVars[v]; ok {
-			return nil // переменная будет определена
-		}
-		return fmt.Errorf("unknown variable or invalid string literal: '%s'", v)
-	default:
-		return fmt.Errorf("unsupported operand type: %T", v)
 	}
+	return nil
 }
 
-func (vs *VariableStore) Exists(name string) bool {
-	vs.mu.RLock()
-	defer vs.mu.RUnlock()
-	_, exists := vs.store[name]
-	return exists
+func tryParseInt(s string) (int64, error) {
+	var n int64
+	_, err := fmt.Sscanf(s, "%d", &n)
+	return n, err
 }
