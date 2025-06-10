@@ -14,10 +14,9 @@ type GrpcServer struct {
 	pb.UnimplementedCalculatorServer
 }
 
+// вывод пачкой
 func (s *GrpcServer) Execute(ctx context.Context, req *pb.ExecuteRequest) (*pb.ExecuteResponse, error) {
 	instructions := []model.Instruction{}
-
-	// необходимо преобразовать запрос из protobuf в типы Go
 	for _, instr := range req.Instructions {
 		mi, err := convertToModelInstruction(instr)
 		if err != nil {
@@ -25,23 +24,36 @@ func (s *GrpcServer) Execute(ctx context.Context, req *pb.ExecuteRequest) (*pb.E
 		}
 		instructions = append(instructions, mi)
 	}
-
-	// основная логика
-	result, err := core.ExecuteInstructions(instructions)
+	results, err := core.ExecuteInstructions(instructions)
 	if err != nil {
 		return nil, err
 	}
-
-	// формирование ответа, обратное преобразование в protobuf
 	resp := &pb.ExecuteResponse{}
-	for _, r := range result {
+	for _, r := range results {
 		resp.Items = append(resp.Items, &pb.PrintResult{
 			Var:   r.Var,
 			Value: r.Value,
 		})
 	}
-
 	return resp, nil
+}
+
+// вывод по одному в потоке
+func (s *GrpcServer) ExecuteStream(req *pb.ExecuteRequest, stream pb.Calculator_ExecuteStreamServer) error {
+	instructions := []model.Instruction{}
+	for _, instr := range req.Instructions {
+		mi, err := convertToModelInstruction(instr)
+		if err != nil {
+			return err
+		}
+		instructions = append(instructions, mi)
+	}
+	return core.ExecuteStream(instructions, func(result model.PrintResult) {
+		_ = stream.Send(&pb.PrintResult{
+			Var:   result.Var,
+			Value: result.Value,
+		})
+	})
 }
 
 // пытаемся привести к более конкретному типу

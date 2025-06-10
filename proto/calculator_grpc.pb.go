@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	Calculator_Execute_FullMethodName = "/calculator.Calculator/Execute"
+	Calculator_Execute_FullMethodName       = "/calculator.Calculator/Execute"
+	Calculator_ExecuteStream_FullMethodName = "/calculator.Calculator/ExecuteStream"
 )
 
 // CalculatorClient is the client API for Calculator service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type CalculatorClient interface {
 	Execute(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (*ExecuteResponse, error)
+	ExecuteStream(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PrintResult], error)
 }
 
 type calculatorClient struct {
@@ -47,11 +49,31 @@ func (c *calculatorClient) Execute(ctx context.Context, in *ExecuteRequest, opts
 	return out, nil
 }
 
+func (c *calculatorClient) ExecuteStream(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[PrintResult], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &Calculator_ServiceDesc.Streams[0], Calculator_ExecuteStream_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[ExecuteRequest, PrintResult]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Calculator_ExecuteStreamClient = grpc.ServerStreamingClient[PrintResult]
+
 // CalculatorServer is the server API for Calculator service.
 // All implementations must embed UnimplementedCalculatorServer
 // for forward compatibility.
 type CalculatorServer interface {
 	Execute(context.Context, *ExecuteRequest) (*ExecuteResponse, error)
+	ExecuteStream(*ExecuteRequest, grpc.ServerStreamingServer[PrintResult]) error
 	mustEmbedUnimplementedCalculatorServer()
 }
 
@@ -64,6 +86,9 @@ type UnimplementedCalculatorServer struct{}
 
 func (UnimplementedCalculatorServer) Execute(context.Context, *ExecuteRequest) (*ExecuteResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Execute not implemented")
+}
+func (UnimplementedCalculatorServer) ExecuteStream(*ExecuteRequest, grpc.ServerStreamingServer[PrintResult]) error {
+	return status.Errorf(codes.Unimplemented, "method ExecuteStream not implemented")
 }
 func (UnimplementedCalculatorServer) mustEmbedUnimplementedCalculatorServer() {}
 func (UnimplementedCalculatorServer) testEmbeddedByValue()                    {}
@@ -104,6 +129,17 @@ func _Calculator_Execute_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Calculator_ExecuteStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(ExecuteRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(CalculatorServer).ExecuteStream(m, &grpc.GenericServerStream[ExecuteRequest, PrintResult]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type Calculator_ExecuteStreamServer = grpc.ServerStreamingServer[PrintResult]
+
 // Calculator_ServiceDesc is the grpc.ServiceDesc for Calculator service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -116,6 +152,12 @@ var Calculator_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Calculator_Execute_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "ExecuteStream",
+			Handler:       _Calculator_ExecuteStream_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "proto/calculator.proto",
 }

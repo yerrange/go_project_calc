@@ -46,7 +46,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/model.PrintResults"
+                            "$ref": "#/definitions/model.PrintResult"
                         }
                     },
                     "400": {
@@ -101,17 +101,6 @@ const docTemplate = `{
                 },
                 "var": {
                     "type": "string"
-                }
-            }
-        },
-        "model.PrintResults": {
-            "type": "object",
-            "properties": {
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/model.PrintResult"
-                    }
                 }
             }
         }

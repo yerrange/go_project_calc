@@ -7,14 +7,6 @@ const (
 	TypePrint InstructionType = "print"
 )
 
-// type IncomingInstruction struct {
-// 	Type  string      `json:"type"`
-// 	Var   string      `json:"var"`
-// 	Op    string      `json:"op,omitempty"`
-// 	Left  interface{} `json:"left,omitempty"`
-// 	Right interface{} `json:"right,omitempty"`
-// }
-
 type Instruction struct {
 	Type  InstructionType `json:"type"`
 	Var   string          `json:"var"`
@@ -26,8 +18,4 @@ type Instruction struct {
 type PrintResult struct {
 	Var   string `json:"var"`
 	Value int64  `json:"value"`
-}
-
-type PrintResults struct {
-	Items []PrintResult `json:"items"`
 }

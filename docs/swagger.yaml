@@ -25,13 +25,6 @@ definitions:
       var:
         type: string
     type: object
-  model.PrintResults:
-    properties:
-      items:
-        items:
-          $ref: '#/definitions/model.PrintResult'
-        type: array
-    type: object
 info:
   contact: {}
 paths:
@@ -55,7 +48,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/model.PrintResults'
+            $ref: '#/definitions/model.PrintResult'
         "400":
           description: invalid json
           schema:

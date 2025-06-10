@@ -16,7 +16,7 @@ import (
 // @Accept json
 // @Produce json
 // @Param instructions body []model.Instruction true "Instructions"
-// @Success 200 {object} model.PrintResults
+// @Success 200 {object} model.PrintResult
 // @Failure 400 {string} string "invalid json"
 // @Failure 500 {string} string "internal error"
 // @Router /execute [post]

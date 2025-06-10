@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -61,44 +62,57 @@ func (vs *VariableStore) Get(name string) (int64, error) {
 	}
 }
 
-func ExecuteInstructions(instructions []model.Instruction) ([]model.PrintResult, error) {
+func ExecuteInstructionsGeneric(instructions []model.Instruction, onPrint func(model.PrintResult)) error {
 	store := NewVariableStore()
 	var wg sync.WaitGroup
-	var resultsMu sync.Mutex
-	var results []model.PrintResult
-
+	var printWg sync.WaitGroup
 	declared := make(map[string]struct{})
+	errCh := make(chan error, len(instructions))
 
+	// собираем все переменные, которые будут объявлены
+	for _, instr := range instructions {
+		if instr.Type == model.TypeCalc {
+			if _, exists := declared[instr.Var]; exists {
+				return fmt.Errorf("variable '%s' declared multiple times", instr.Var)
+			}
+			declared[instr.Var] = struct{}{}
+		}
+	}
+
+	// проверяем, что в print-инструкциях не вызываются переменные, которые не будут рассчитаны
+	for _, instr := range instructions {
+		if instr.Type == model.TypePrint {
+			if _, ok := declared[instr.Var]; !ok {
+				return fmt.Errorf("cannot print undeclared variable: %s", instr.Var)
+			}
+		}
+	}
+
+	// основной цикл исполнения инструкций
 	for _, instr := range instructions {
 		switch instr.Type {
 		case model.TypeCalc:
-			if _, exists := declared[instr.Var]; exists {
-				return nil, fmt.Errorf("variable '%s' declared multiple times", instr.Var)
-			}
-			declared[instr.Var] = struct{}{}
-
 			if err := validateOperands(instr.Left, instr.Right, declared); err != nil {
-				return nil, fmt.Errorf("invalid operands for '%s': %v", instr.Var, err)
+				return fmt.Errorf("invalid operands for '%s': %v", instr.Var, err)
 			}
-
 			if _, ok := supportedOps[instr.Op]; !ok {
-				return nil, fmt.Errorf("unsupported operation: %s", instr.Op)
+				return fmt.Errorf("unsupported operation: %s", instr.Op)
 			}
 
 			wg.Add(1)
 			go func(inst model.Instruction) {
 				defer wg.Done()
-				time.Sleep(50 * time.Millisecond)
-
+				time.Sleep(500 * time.Millisecond)
 				left, err := evalOperand(inst.Left, store)
 				if err != nil {
+					errCh <- err
 					return
 				}
 				right, err := evalOperand(inst.Right, store)
 				if err != nil {
+					errCh <- err
 					return
 				}
-
 				res, err := applyOperation(inst.Op, left, right)
 				if err == nil {
 					_ = store.Set(inst.Var, res)
@@ -106,29 +120,45 @@ func ExecuteInstructions(instructions []model.Instruction) ([]model.PrintResult,
 			}(instr)
 
 		case model.TypePrint:
-			if _, ok := declared[instr.Var]; !ok {
-				return nil, fmt.Errorf("cannot print undeclared variable: %s", instr.Var)
-			}
-
-			wg.Add(1)
+			printWg.Add(1)
 			go func(inst model.Instruction) {
-				defer wg.Done()
+				defer printWg.Done()
+				time.Sleep(time.Duration(rand.Intn(5000)+5000) * time.Millisecond)
 				val, err := store.Get(inst.Var)
 				if err != nil {
+					errCh <- fmt.Errorf("error getting %s: %v", inst.Var, err)
 					return
 				}
-				resultsMu.Lock()
-				results = append(results, model.PrintResult{Var: inst.Var, Value: val})
-				resultsMu.Unlock()
+				fmt.Printf("Sending: %s = %d\n", inst.Var, val)
+				onPrint(model.PrintResult{Var: inst.Var, Value: val})
 			}(instr)
 
 		default:
-			return nil, fmt.Errorf("unknown instruction type: %s", instr.Type)
+			return fmt.Errorf("unknown instruction type: %s", instr.Type)
 		}
 	}
 
 	wg.Wait()
-	return results, nil
+	printWg.Wait()
+
+	select {
+	case err := <-errCh:
+		return err
+	default:
+		return nil
+	}
+}
+
+func ExecuteInstructions(instructions []model.Instruction) ([]model.PrintResult, error) {
+	var results []model.PrintResult
+	err := ExecuteInstructionsGeneric(instructions, func(r model.PrintResult) {
+		results = append(results, r)
+	})
+	return results, err
+}
+
+func ExecuteStream(instructions []model.Instruction, onPrint func(model.PrintResult)) error {
+	return ExecuteInstructionsGeneric(instructions, onPrint)
 }
 
 var supportedOps = map[string]struct{}{
@@ -137,38 +167,10 @@ var supportedOps = map[string]struct{}{
 	"*": {},
 }
 
-func applyOperation(op string, a, b int64) (int64, error) {
-	switch op {
-	case "+":
-		return a + b, nil
-	case "-":
-		return a - b, nil
-	case "*":
-		return a * b, nil
-	default:
-		return 0, fmt.Errorf("invalid operator: %s", op)
-	}
-}
-
-func evalOperand(op interface{}, store *VariableStore) (int64, error) {
-	switch v := op.(type) {
-	case int64:
-		return v, nil
-	case float64:
-		return int64(v), nil
-	case string:
-		if n, err := tryParseInt(v); err == nil {
-			return n, nil
-		}
-		return store.Get(v)
-	default:
-		return 0, fmt.Errorf("unsupported operand type: %T", v)
-	}
-}
-
+// валидация операндов
 func validateOperands(left, right interface{}, declared map[string]struct{}) error {
-	for _, op := range []interface{}{left, right} {
-		switch v := op.(type) {
+	for _, operand := range []interface{}{left, right} {
+		switch v := operand.(type) {
 		case int64, float64:
 			continue
 		case string:
@@ -185,6 +187,38 @@ func validateOperands(left, right interface{}, declared map[string]struct{}) err
 	return nil
 }
 
+// преобразование операндов
+func evalOperand(operand interface{}, store *VariableStore) (int64, error) {
+	switch v := operand.(type) {
+	case int64:
+		return v, nil
+	case float64:
+		return int64(v), nil
+	case string:
+		if n, err := tryParseInt(v); err == nil {
+			return n, nil
+		}
+		return store.Get(v)
+	default:
+		return 0, fmt.Errorf("unsupported operand type: %T", v)
+	}
+}
+
+// доступные операции
+func applyOperation(operation string, a, b int64) (int64, error) {
+	switch operation {
+	case "+":
+		return a + b, nil
+	case "-":
+		return a - b, nil
+	case "*":
+		return a * b, nil
+	default:
+		return 0, fmt.Errorf("unsupported operation: %s", operation)
+	}
+}
+
+// s - число?
 func tryParseInt(s string) (int64, error) {
 	var n int64
 	_, err := fmt.Sscanf(s, "%d", &n)

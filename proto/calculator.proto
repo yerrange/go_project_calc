@@ -26,4 +26,5 @@ message ExecuteResponse {
 
 service Calculator {
   rpc Execute (ExecuteRequest) returns (ExecuteResponse);
+  rpc ExecuteStream (ExecuteRequest) returns (stream PrintResult);
 }

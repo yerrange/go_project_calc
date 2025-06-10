@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"log"
 	"os"
 
@@ -11,7 +10,7 @@ import (
 )
 
 func main() {
-	data, err := ioutil.ReadFile("input.json")
+	data, err := os.ReadFile("input_1000.json")
 	if err != nil {
 		log.Fatalf("failed to read input.json: %v", err)
 	}

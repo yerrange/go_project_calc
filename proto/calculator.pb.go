@@ -255,10 +255,11 @@ const file_proto_calculator_proto_rawDesc = "" +
 	"\x03var\x18\x01 \x01(\tR\x03var\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x03R\x05value\"@\n" +
 	"\x0fExecuteResponse\x12-\n" +
-	"\x05items\x18\x01 \x03(\v2\x17.calculator.PrintResultR\x05items2P\n" +
+	"\x05items\x18\x01 \x03(\v2\x17.calculator.PrintResultR\x05items2\x98\x01\n" +
 	"\n" +
 	"Calculator\x12B\n" +
-	"\aExecute\x12\x1a.calculator.ExecuteRequest\x1a\x1b.calculator.ExecuteResponseB\"Z go_project_calc/proto;calculatorb\x06proto3"
+	"\aExecute\x12\x1a.calculator.ExecuteRequest\x1a\x1b.calculator.ExecuteResponse\x12F\n" +
+	"\rExecuteStream\x12\x1a.calculator.ExecuteRequest\x1a\x17.calculator.PrintResult0\x01B\"Z go_project_calc/proto;calculatorb\x06proto3"
 
 var (
 	file_proto_calculator_proto_rawDescOnce sync.Once
@@ -283,9 +284,11 @@ var file_proto_calculator_proto_depIdxs = []int32{
 	0, // 0: calculator.ExecuteRequest.instructions:type_name -> calculator.Instruction
 	2, // 1: calculator.ExecuteResponse.items:type_name -> calculator.PrintResult
 	1, // 2: calculator.Calculator.Execute:input_type -> calculator.ExecuteRequest
-	3, // 3: calculator.Calculator.Execute:output_type -> calculator.ExecuteResponse
-	3, // [3:4] is the sub-list for method output_type
-	2, // [2:3] is the sub-list for method input_type
+	1, // 3: calculator.Calculator.ExecuteStream:input_type -> calculator.ExecuteRequest
+	3, // 4: calculator.Calculator.Execute:output_type -> calculator.ExecuteResponse
+	2, // 5: calculator.Calculator.ExecuteStream:output_type -> calculator.PrintResult
+	4, // [4:6] is the sub-list for method output_type
+	2, // [2:4] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name
 	2, // [2:2] is the sub-list for extension extendee
 	0, // [0:2] is the sub-list for field type_name
